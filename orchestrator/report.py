@@ -63,6 +63,8 @@ def validate_final_output(data: Any, *, schema_path: Path | None = None) -> dict
 
 _VALID_STATUS = {"completed", "partial", "failed"}
 _VALID_SEVERITY = {"info", "low", "medium", "high", "critical"}
+#: Rank for sorting findings most-severe first during partial recovery.
+_VALID_SEVERITY_ORDER = {s: i for i, s in enumerate(("info", "low", "medium", "high", "critical"))}
 
 
 def _minimal_validate(data: dict[str, Any]) -> None:
@@ -96,6 +98,92 @@ def read_final_output(path: Path, *, schema_path: Path | None = None) -> dict[st
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise FinalOutputError(f"final output unreadable: {exc}") from exc
+    return validate_final_output(data, schema_path=schema_path)
+
+
+# --- Partial recovery from the evidence store -------------------------------
+
+#: Finding fields that belong in final_output.schema.json (additionalProperties: false),
+#: mirroring evidence_store.store.FINDING_SCHEMA_FIELDS. Kept here so recovery has no
+#: import dependency on the MCP tree (which is not an installed package).
+_FINDING_FIELDS: tuple[str, ...] = (
+    "id",
+    "title",
+    "severity",
+    "cwe",
+    "location",
+    "summary",
+    "evidence",
+    "reproduction",
+    "remediation",
+)
+
+
+def _read_store_file(run_dir: Path, name: str) -> dict[str, Any]:
+    path = run_dir / "evidence_store" / f"{name}.json"
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def recover_partial_final(
+    run_dir: Path,
+    *,
+    targets: list[str],
+    phases_completed: list[str] | None = None,
+    notes: str | None = None,
+    schema_path: Path | None = None,
+) -> dict[str, Any] | None:
+    """Reconstruct a ``partial`` final output from the run's evidence store.
+
+    Used when the agent never wrote a valid ``final.json`` (e.g. the run was
+    interrupted mid-turn) so work already recorded in the evidence store is not
+    thrown away. Reads ``<run_dir>/evidence_store/{findings,coverage}.json`` —
+    the same files the evidence_store MCP persists — and shapes them to
+    ``final_output.schema.json``.
+
+    Returns ``None`` when the store holds nothing to salvage.
+    """
+    raw_findings = _read_store_file(run_dir, "findings")
+    raw_coverage = _read_store_file(run_dir, "coverage")
+    if not raw_findings and not raw_coverage:
+        return None
+
+    coverage: list[dict[str, Any]] = []
+    for row in sorted(
+        raw_coverage.values(), key=lambda r: r.get("created_at", "")
+    ):
+        if not isinstance(row, dict) or "area" not in row or "state" not in row:
+            continue
+        item = {"area": row["area"], "state": row["state"]}
+        if row.get("reason"):
+            item["reason"] = row["reason"]
+        coverage.append(item)
+
+    findings: list[dict[str, Any]] = []
+    for finding in raw_findings.values():
+        if not isinstance(finding, dict):
+            continue
+        item = {k: finding[k] for k in _FINDING_FIELDS if k in finding}
+        for optional in ("reproduction", "remediation", "evidence"):
+            if not item.get(optional):
+                item.pop(optional, None)
+        findings.append(item)
+    findings.sort(key=lambda f: (-_VALID_SEVERITY_ORDER.get(f.get("severity", ""), 0), f.get("id", "")))
+
+    data: dict[str, Any] = {
+        "status": "partial",
+        "scope": {"targets": list(targets)},
+        "coverage": coverage,
+        "findings": findings,
+        "stats": {"phases_completed": list(phases_completed or [])},
+    }
+    if notes:
+        data["scope"]["notes"] = notes
     return validate_final_output(data, schema_path=schema_path)
 
 

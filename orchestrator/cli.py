@@ -29,7 +29,12 @@ from . import __version__
 from .config import load_config
 from .events import EventAggregate, describe_event, parse_line
 from .harness import Telemetry, UnknownAdapterError, build_command, canonical_adapter, run_agent
-from .report import FinalOutputError, generate_reports, read_final_output
+from .report import (
+    FinalOutputError,
+    generate_reports,
+    read_final_output,
+    recover_partial_final,
+)
 from .resources import runs_dir, schema_path
 from .scan_modes import get_scan_mode, is_black_box, phases_for
 from .scope import ScopeError, Target, build_scope, render_scope_block
@@ -316,9 +321,36 @@ def _cmd_run(args: argparse.Namespace) -> int:
             f"cost={aggregate.cost:.4f}"
         )
     except FinalOutputError as exc:
-        _log(f"fatal: {exc}")
-        record["status"] = "failed"
-        exit_code = EXIT_FATAL
+        # The agent left no valid final.json (interrupted run, e.g. a turn the
+        # model provider refused mid-stream). Rather than discard the whole run,
+        # salvage whatever the evidence store already recorded as a partial.
+        recovered = None
+        try:
+            recovered = recover_partial_final(
+                run_dir,
+                targets=[t.value for t in targets],
+                phases_completed=list(phases),
+                notes=f"Run interrupted before final output; recovered from evidence store ({exc}).",
+                schema_path=_SCHEMA_PATH,
+            )
+        except FinalOutputError as recover_exc:
+            _log(f"warning: partial recovery failed schema validation: {recover_exc}")
+        if recovered is not None:
+            artifacts = generate_reports(
+                run_dir, recovered, timestamp=end_time.isoformat()
+            )
+            record["status"] = "partial"
+            record["interrupted"] = True
+            record["findings_count"] = len(recovered.get("findings") or [])
+            record["artifacts"] = {name: str(path) for name, path in artifacts.items()}
+            _log(
+                f"interrupted: {exc} — recovered partial "
+                f"(findings={record['findings_count']}, cost={aggregate.cost:.4f})"
+            )
+        else:
+            _log(f"fatal: {exc} (no evidence to recover)")
+            record["status"] = "failed"
+            exit_code = EXIT_FATAL
     finally:
         _write_run_record(run_dir, record)
 
