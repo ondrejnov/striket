@@ -66,8 +66,8 @@ def runs_dir() -> Path:
 
 __all__ = [
     "data_root",
-    "schema_path",
-    "harness_dir",
     "evidence_store_dir",
+    "harness_dir",
     "runs_dir",
+    "schema_path",
 ]

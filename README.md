@@ -18,7 +18,9 @@ and renders reports from the agent's structured final output.
 |---|---|
 | Operational doctrine | `harness/CLAUDE.md`, derived from Strix's system prompt; the authorization/scope rules are carried verbatim. |
 | Agent roles | `harness/agents/{root,recon,mapping,testing,fix}.md`. |
-| Skill library | `harness/skills/` — vulnerabilities, frameworks, protocols, cloud, tooling, scan modes, analysis. |
+| Skill library | `harness/skills/` — vulnerabilities, frameworks, protocols, cloud, tooling, scan modes, analysis, coordination (incl. `blackbox_web`). |
+| Notes, coverage, findings | `mcp/evidence_store/` — a small MCP server replacing Strix's notes/coverage/threat-model/reporting tools; also stores HTTP evidence. |
+| Browser | Vercel `agent-browser` CLI, unchanged, driven via Bash. The Caido proxy is not ported; direct HTTP uses `curl` / `httpx`. |
 | Run layout and reports | `striket_runs/<run-name>/` in the Strix-compatible layout, with `vulnerabilities.json` in Strix-shaped records. |
 | Sandbox | `containers/` (Dockerfile and entrypoint). |
 
@@ -60,16 +62,26 @@ and renders reports from the agent's structured final output.
 
 ## Status
 
-First-phase scope is **M0–M2** (white-box code review), adapter **`claude`**
-only, **headless** only. `claude-p` and `opencode` are accepted as known
+First-phase scope is **M0–M3** — white-box code review (M0–M2) and black-box
+web testing (M3) — with adapter **`claude`** only, **headless** only. `claude-p` and `opencode` are accepted as known
 adapters but are verified later (M4).
 
 > [!NOTE]
-> The `fix` phase is **intentionally disabled**. Neither scan mode runs it
-> (`quick`: recon → testing; `deep`: recon → mapping → testing), so Striket
+> The `fix` phase is **intentionally disabled**. No phase plan runs it, so Striket
 > only reports findings with their proposed remediation and never modifies the
 > target. The `fix` role directive (`harness/agents/fix.md`) is kept from Strix
 > but is not enabled in `orchestrator/scan_modes.py`.
+
+The phase plan depends on the scan mode and on the classified target types:
+
+| Targets | `quick` | `deep` |
+|---|---|---|
+| Code (local path) | recon → testing | recon → mapping → testing |
+| URL / domain / IP | recon → mapping → testing | recon → mapping → testing |
+| Mixed | ordered union of both | ordered union of both |
+
+Black-box runs always include `mapping`, because routes, parameters and the
+auth model must be discovered by crawling instead of read from source.
 
 ## Install
 
@@ -112,6 +124,47 @@ striket run \
 This builds and runs `agentiscode`, reads its `--json` events as they stream,
 and writes a run under `striket_runs/<run-name>/`.
 
+### Black-box web testing
+
+A run becomes black-box when any target is a URL, domain or IP
+(`orchestrator/scope.py` classifies targets; `scan_modes.is_black_box` decides).
+
+```bash
+striket run --target https://staging.example.com --scan-mode quick --headless
+```
+
+> [!IMPORTANT]
+> Black-box runs send live traffic to the target. Only point Striket at assets
+> you are explicitly authorized to test.
+
+For a black-box run the orchestrator:
+
+- selects the black-box phase plan (see [Status](#status)),
+- adds a `BLACK-BOX WEB RUN` block to the prompt that tells the agent to use the
+  `agent-browser` CLI and direct HTTP (`curl` / `httpx`) via Bash, strictly
+  within the authorized scope,
+- records `"black_box": true` and the resolved `phases` in `run.json`.
+
+The agent loads the `blackbox-web` coordination skill
+(`harness/skills/coordination/blackbox_web/`) plus the `agent_browser` and
+`httpx` tooling skills. The mapping and testing roles in `harness/agents/`
+carry the black-box methodology alongside the white-box one.
+
+#### HTTP evidence
+
+Every HTTP interaction that backs a finding must be stored as evidence and cited
+by the finding:
+
+1. The agent stores the raw request/response pair with
+   `mcp__evidence_store__add_evidence` (`type="http"`), using the
+   `=== REQUEST ===` / `=== RESPONSE ===` text convention. Secrets are redacted.
+2. The tool returns a ref such as `evidence:E-0001`.
+3. The finding cites it: `evidence: [{"type": "http", "ref": "evidence:E-0001"}]`.
+   Unknown refs are rejected.
+
+The evidence flows into `final.json` and the reports. Details are in
+[`mcp/evidence_store/README.md`](mcp/evidence_store/README.md#http-evidence-black-box-runs).
+
 ### Configuration
 
 Every tunable has a default in `orchestrator/config.py`. Resolution order:
@@ -140,8 +193,9 @@ Each run directory (`striket_runs/<run-name>/`, Strix-compatible) holds:
 
 | File | Contents |
 |---|---|
-| `run.json` | Run record: status, timings, targets, config, streamed cost/usage. |
+| `run.json` | Run record: status, timings, targets, config, resolved `phases`, `black_box` flag, streamed cost/usage. |
 | `final.json` | The agent's structured output, validated against the schema. |
+| `evidence_store/` | Notes, coverage, threat models, evidence (including HTTP request/response pairs) and findings recorded during the run. |
 | `session.id` | The adapter session id (for resume/telemetry). |
 | `penetration_test_report.md` | Human-readable executive report. |
 | `vulnerabilities.json` | Findings as Strix-shaped vulnerability records. |
@@ -176,10 +230,18 @@ orchestrator/
   cli.py          `striket run` entry point; run.json; exit codes
   harness.py      build & run the agentiscode command (adapter validation)
   config.py       defaults + config-file/env loader
-  scan_modes.py   quick|deep -> timeout, depth, allowed phases
+  scan_modes.py   quick|deep -> timeout, depth, white-box/black-box phase plans
   scope.py        scope block for the prompt + in-scope-only validation
   events.py       streaming parser for agentiscode --json events
   report.py       final.json -> markdown + vulnerabilities.json + SARIF
+harness/
+  CLAUDE.md       operational doctrine (white-box + black-box rules)
+  agents/         root, recon, mapping, testing, fix role directives
+  skills/         ported skill library (incl. coordination/blackbox_web)
+mcp/
+  evidence_store/ MCP server: notes, coverage, threat models, evidence, findings
 schemas/
   final_output.schema.json
+tests/            focus, HTTP-evidence capture, SARIF validation
+containers/       sandbox image (agent-browser, httpx, scanners)
 ```

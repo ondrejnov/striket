@@ -1,14 +1,35 @@
 """Scan modes: quick vs deep.
 
 A scan mode maps to a wall-clock ``timeout_s``, an analysis ``depth`` hint fed
-into the prompt, and the ordered list of ``phases`` the agent is allowed to run.
-First-phase scope is white-box code review, so the default phase lists stay in
-the recon -> mapping -> testing -> fix progression without browser/HTTP work.
+into the prompt, and the ordered list of phases the agent is allowed to run.
+
+Each mode carries two phase plans selected by the dominant target type:
+
+* ``phases`` — white-box code review (Bash + skills, no browser/HTTP), the
+  recon -> mapping -> testing progression used for ``code`` targets.
+* ``web_phases`` — black-box live-target web work (recon = live surface/port/
+  tech/subdomain discovery, mapping = crawl routes/params/auth/session,
+  testing = per-vuln-class with browser + HTTP) used for ``url``/``domain``/
+  ``ip`` targets.
+
+:func:`phases_for` resolves the plan for a concrete set of target types and
+unions both when a run mixes code and live targets, so the merged plan still
+reads recon -> mapping -> testing. The orchestrator stays adapter-agnostic: it
+only asks which phases a classified target set should run.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+
+# Target types that require live black-box web work (browser + direct HTTP)
+# instead of white-box code review.
+WEB_TARGET_TYPES = frozenset({"url", "domain", "ip"})
+
+# Canonical ordering used when unioning white-box and black-box phase lists for
+# a mixed run, so the merged plan still reads recon -> mapping -> testing (-> fix).
+_PHASE_ORDER = ("recon", "mapping", "testing", "fix")
 
 
 @dataclass(frozen=True)
@@ -17,6 +38,7 @@ class ScanMode:
     timeout_s: int
     depth: str
     phases: tuple[str, ...]
+    web_phases: tuple[str, ...]
 
 
 QUICK = ScanMode(
@@ -24,6 +46,9 @@ QUICK = ScanMode(
     timeout_s=900,
     depth="shallow",
     phases=("recon", "testing"),
+    # Black-box needs a mapping/crawl phase to discover routes/params/auth even
+    # in quick, where white-box code review skips it.
+    web_phases=("recon", "mapping", "testing"),
 )
 
 DEEP = ScanMode(
@@ -31,6 +56,7 @@ DEEP = ScanMode(
     timeout_s=10800,
     depth="deep",
     phases=("recon", "mapping", "testing"),
+    web_phases=("recon", "mapping", "testing"),
 )
 
 _MODES: dict[str, ScanMode] = {QUICK.name: QUICK, DEEP.name: DEEP}
@@ -56,4 +82,47 @@ def get_scan_mode(name: str) -> ScanMode:
         ) from None
 
 
-__all__ = ["DEFAULT_SCAN_MODE", "DEEP", "QUICK", "ScanMode", "get_scan_mode", "known_modes"]
+def is_black_box(target_types: Iterable[str]) -> bool:
+    """True when any target is a live web asset (url/domain/ip).
+
+    A black-box run drives the agent through live web work (browser + HTTP) and
+    must capture HTTP evidence; a run with only ``code`` targets stays white-box.
+    """
+    return any(t in WEB_TARGET_TYPES for t in target_types)
+
+
+def phases_for(mode: ScanMode, target_types: Iterable[str]) -> tuple[str, ...]:
+    """Resolve the ordered phase plan for ``mode`` given classified targets.
+
+    * Only ``code`` targets -> the mode's white-box ``phases`` (unchanged from
+      M0-M2; no regression).
+    * Any live web target (url/domain/ip) -> the mode's black-box ``web_phases``.
+    * A mix -> the ordered union of both, so recon -> mapping -> testing holds.
+
+    Falls back to white-box ``phases`` when no target type is recognised.
+    """
+    types = list(target_types)
+    has_web = is_black_box(types)
+    has_code = any(t == "code" for t in types)
+
+    selected: set[str] = set()
+    if has_code:
+        selected.update(mode.phases)
+    if has_web:
+        selected.update(mode.web_phases)
+    if not selected:
+        selected.update(mode.phases)
+    return tuple(phase for phase in _PHASE_ORDER if phase in selected)
+
+
+__all__ = [
+    "DEEP",
+    "DEFAULT_SCAN_MODE",
+    "QUICK",
+    "WEB_TARGET_TYPES",
+    "ScanMode",
+    "get_scan_mode",
+    "is_black_box",
+    "known_modes",
+    "phases_for",
+]

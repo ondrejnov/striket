@@ -487,9 +487,9 @@ def generate_reports(
 
 
 __all__ = [
-    "FinalOutputError",
     "SARIF_SCHEMA",
     "SARIF_VERSION",
+    "FinalOutputError",
     "build_sarif_report",
     "finding_to_vuln",
     "generate_reports",

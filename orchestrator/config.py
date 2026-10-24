@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import os
 import tomllib
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -189,7 +189,6 @@ def load_config(
 
 
 __all__ = [
-    "Config",
     "DEFAULT_ADAPTER",
     "DEFAULT_DISALLOWED_TOOLS",
     "DEFAULT_EFFORT",
@@ -198,5 +197,6 @@ __all__ = [
     "DEFAULT_MODEL",
     "DEFAULT_PERMISSION_MODE",
     "DEFAULT_SCAN_MODE",
+    "Config",
     "load_config",
 ]

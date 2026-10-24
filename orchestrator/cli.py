@@ -20,9 +20,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from . import __version__
 from .config import load_config
@@ -30,7 +31,7 @@ from .events import EventAggregate, describe_event, parse_line
 from .harness import Telemetry, UnknownAdapterError, build_command, canonical_adapter, run_agent
 from .report import FinalOutputError, generate_reports, read_final_output
 from .resources import runs_dir, schema_path
-from .scan_modes import get_scan_mode
+from .scan_modes import get_scan_mode, is_black_box, phases_for
 from .scope import ScopeError, Target, build_scope, render_scope_block
 from .workspace import stage_workspace
 
@@ -84,19 +85,37 @@ def _render_focus_block(focus: str | None) -> str:
     )
 
 
+_BLACK_BOX_BLOCK = (
+    "\nBLACK-BOX WEB RUN:\n"
+    "- The authorized targets are live web assets (URL / domain / IP), so this "
+    "is a black-box web engagement, not a code review. There is no source tree "
+    "to read; work hands-on against the live targets within the scope above.\n"
+    "- Load the black-box web doctrine and skills, and drive the work with the "
+    "`agent-browser` CLI and direct HTTP (`curl` / `httpx`) via Bash, strictly "
+    "within the authorized scope.\n"
+    "- Every HTTP interaction that backs a finding MUST be captured as HTTP "
+    "evidence: store the raw request/response pair with the evidence_store tool "
+    "`mcp__evidence_store__add_evidence` (type=\"http\") following the canonical "
+    "request/response convention from the loaded doctrine/skills, then cite the "
+    "returned ref in that finding's evidence (type \"http\").\n"
+)
+
+
 def _build_prompt(
     scope_block: str,
     mode_name: str,
     depth: str,
     phases: Sequence[str],
     focus: str | None = None,
+    black_box: bool = False,
 ) -> str:
     """Compose the prompt: scope framing + phase directive + optional focus.
 
     Operational doctrine, agents, and skills reach the adapter via ``--cwd``
     (the sandbox ``harness/`` tree); the prompt itself carries only the scope
-    block, the run's phase plan, and any operator focus guidance. No secret is
-    placed in the prompt.
+    block, the run's phase plan, any black-box web mandate, and any operator
+    focus guidance. No secret is placed in the prompt, and no payload or exploit
+    is ever embedded — concrete actions are the runtime agent's job.
     """
     phase_list = ", ".join(phases)
     return (
@@ -110,6 +129,7 @@ def _build_prompt(
         "- When finished, emit the final result strictly per the provided "
         "output schema; findings are taken from that structured output, not "
         "from prose.\n"
+        f"{_BLACK_BOX_BLOCK if black_box else ''}"
         f"{_render_focus_block(focus)}"
     )
 
@@ -188,8 +208,17 @@ def _cmd_run(args: argparse.Namespace) -> int:
         if target.type == "code" and target.workspace_path
     ]
 
+    # Select the phase plan from the classified targets: white-box for code,
+    # black-box live-target web for url/domain/ip, unioned for a mixed run.
+    # Keeps M0-M2 behaviour identical for code-only runs.
+    target_types = [target.type for target in targets]
+    phases = phases_for(mode, target_types)
+    black_box = is_black_box(target_types)
+
     scope_block = render_scope_block(targets)
-    prompt = _build_prompt(scope_block, mode.name, mode.depth, mode.phases, config.focus)
+    prompt = _build_prompt(
+        scope_block, mode.name, mode.depth, phases, config.focus, black_box=black_box
+    )
 
     record: dict[str, Any] = {
         "run_name": run_name,
@@ -201,6 +230,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
         "instruction": f"{mode.name} scan of {', '.join(t.value for t in targets)}",
         "focus": config.focus,
         "scan_mode": mode.name,
+        "phases": list(phases),
+        "black_box": black_box,
         "config": {**config.to_dict(), "adapter": adapter},
         "llm_usage": {"cost": 0.0},
     }

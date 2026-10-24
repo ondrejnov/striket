@@ -11,8 +11,9 @@ streams. Malformed lines are treated as opaque data and skipped.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 # Keys various adapters have used for the same concept. We probe several so the
 # orchestrator does not depend on one adapter's vocabulary.

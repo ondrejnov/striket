@@ -15,9 +15,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Sequence
 
 from .config import Config
 
@@ -186,8 +186,8 @@ def run_agent(
 __all__ = [
     "AGENTISCODE_BIN",
     "KNOWN_ADAPTERS",
-    "Telemetry",
     "USAGE_EXIT_CODE",
+    "Telemetry",
     "UnknownAdapterError",
     "build_command",
     "canonical_adapter",

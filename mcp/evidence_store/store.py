@@ -313,10 +313,10 @@ class EvidenceStore:
     # -- evidence artifacts ------------------------------------------------------
 
     def add_evidence(
-        self, type: str, content: str, description: str = "", agent: str = ""  # noqa: A002
+        self, type: str, content: str, description: str = "", agent: str = ""
     ) -> dict[str, Any]:
         """Store an evidence artifact and return its ``ref`` for use in findings."""
-        type = _clean(type, "type", required=True).lower()  # noqa: A001
+        type = _clean(type, "type", required=True).lower()
         if type not in EVIDENCE_TYPES:
             raise StoreError(f"type must be one of {list(EVIDENCE_TYPES)}, got {type!r}")
         content = _clean(content, "content", required=True)
@@ -348,7 +348,7 @@ class EvidenceStore:
 
     # -- findings ----------------------------------------------------------------
 
-    def add_finding(  # noqa: PLR0913
+    def add_finding(
         self,
         title: str,
         severity: str,
@@ -359,7 +359,7 @@ class EvidenceStore:
         reproduction: str = "",
         remediation: str = "",
         area: str = "",
-        id: str | None = None,  # noqa: A002
+        id: str | None = None,
         agent: str = "",
     ) -> dict[str, Any]:
         title = _clean(title, "title", required=True)
@@ -418,7 +418,7 @@ class EvidenceStore:
             )
         return result
 
-    def update_finding(self, id: str, **changes: Any) -> dict[str, Any]:  # noqa: A002
+    def update_finding(self, id: str, **changes: Any) -> dict[str, Any]:
         """Revise an existing finding. Only schema fields (plus ``area``) may change."""
         allowed = set(FINDING_SCHEMA_FIELDS) - {"id"} | {"area"}
         unknown = sorted(set(changes) - allowed)
@@ -464,7 +464,7 @@ class EvidenceStore:
         selected.sort(key=lambda f: (-SEVERITIES.index(f["severity"]), f["id"]))
         return {"findings": selected, "count": len(selected), "total_findings": len(findings)}
 
-    def get_finding(self, id: str) -> dict[str, Any]:  # noqa: A002
+    def get_finding(self, id: str) -> dict[str, Any]:
         with self._locked():
             finding = self._read("findings").get(_clean(id, "id", required=True))
         if finding is None:

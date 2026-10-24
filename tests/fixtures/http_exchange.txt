@@ -1,0 +1,13 @@
+=== REQUEST ===
+GET /api/orders/42 HTTP/1.1
+Host: app.example.test
+Accept: application/json
+Cookie: session=<redacted-session-for-user-A>
+
+=== RESPONSE ===
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 118
+
+{"order_id": 42, "owner": "user-B", "total": "19.90", "items": [{"sku": "ABC-1", "qty": 1}]}
+[response body truncated]

@@ -47,12 +47,37 @@ Example `.mcp.json` entry for the harness (the orchestrator fills in the run dir
 | `get_coverage` | Rows (all, one `area`, or by `state`) plus per-state counts. |
 | `coverage_status` | Coverage tracking view: counts, areas still `partial`/`skipped`, findings with no matching coverage row, `fully_tested`. Check before finishing. |
 | `store_threat_model` / `get_threat_model` | Markdown threat model per target; replaced versions are retained as revisions. |
-| `add_evidence` / `get_evidence` | Store an artifact (`http` \| `code` \| `log` \| `screenshot`, capped at 256k chars) and get a ref like `evidence:E-0001`. |
+| `add_evidence` / `get_evidence` | Store an artifact (`http` \| `code` \| `log` \| `screenshot`, capped at 256k chars) and get a ref like `evidence:E-0001`. For `http`, `content` is one raw request/response pair (see below). |
 | `add_finding` / `update_finding` | File or revise a finding. Fields match the schema (`title`, `severity`, `cwe`, `location`, `summary`, `evidence[{type,ref}]`, `reproduction`, `remediation`); `id` is auto-assigned (`F-001`…). Evidence refs must exist; duplicates (same title and location) are rejected; `cwe` is normalized to `CWE-n`. Optional `area` links the finding to its coverage row. |
 | `list_findings` / `get_finding` | Findings, most severe first (optionally by `severity`), or one in full. |
 | `export_final_parts` | `{coverage, findings}` in exact `final_output.schema.json` shape (internal fields stripped), ready to drop into the final structured output. |
 
 Tool failures return `isError: true` with an `error` message; they never crash the server.
+
+## HTTP evidence (black-box runs)
+
+`http` is a first-class evidence type (no schema or store change is needed for it). The
+store does not parse `content`, so a request/response pair is stored as one free-text
+string using this canonical convention, so pairs stay machine- and human-readable:
+
+```
+=== REQUEST ===
+<METHOD> <path> HTTP/x.y
+<request headers, one per line>
+<blank line>
+<request body, if any>
+
+=== RESPONSE ===
+HTTP/x.y <status> <reason>
+<response headers, one per line>
+<blank line>
+<response body, if any (truncate large bodies, note the truncation)>
+```
+
+Put a one-line human label in `description` (e.g. `POST /api/orders/42 — IDOR: user A reads
+user B's order`). The pair is in-session runtime evidence: never store credentials, secrets,
+or reusable exploit strings. A finding cites it like any other ref:
+`evidence=[{"type": "http", "ref": "evidence:E-0001"}]`.
 
 ## Mapping to the final output schema
 

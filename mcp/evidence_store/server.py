@@ -145,11 +145,18 @@ def build_tools(store: EvidenceStore) -> dict[str, tuple[dict[str, Any], Callabl
         _tool(
             "add_evidence",
             "Store an evidence artifact (http|code|log|screenshot) and get a ref to cite in findings. "
-            "No title/location arguments: use `description`, and put file:line into `content`.",
+            "No title/location arguments: use `description`, and put file:line into `content`. "
+            "For type=http, `content` is one raw request/response pair: a '=== REQUEST ===' block "
+            "(request line, headers, blank line, body) then a '=== RESPONSE ===' block (status line, "
+            "headers, blank line, body; truncate and note large bodies). Never store secrets.",
             _obj(
                 {
                     "type": {"type": "string", "enum": list(EVIDENCE_TYPES)},
-                    "content": {"type": "string", "description": "Excerpt, transcript or file path"},
+                    "content": {
+                        "type": "string",
+                        "description": "Excerpt, transcript or file path; for http, a raw "
+                        "request/response pair (=== REQUEST === then === RESPONSE ===)",
+                    },
                     "description": _STR,
                     "agent": _STR,
                 },
