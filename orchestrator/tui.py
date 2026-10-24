@@ -66,6 +66,20 @@ def _format_duration(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}" if hours else f"{minutes:02d}:{secs:02d}"
 
 
+def _engagement_label(rec: dict[str, Any]) -> str:
+    """Return the engagement-type suffix for the Mode line.
+
+    Pure live-web runs are black-box; a run that also carries a source tree is
+    gray-box; code-only runs get no suffix (plain white-box code review).
+    """
+    if rec.get("black_box"):
+        return " (black-box)"
+    types = {t.get("type") for t in (rec.get("targets_info") or [])}
+    if types & {"url", "domain", "ip"} and "code" in types:
+        return " (gray-box)"
+    return ""
+
+
 def _read_findings(run_dir: Path) -> list[dict[str, Any]]:
     path = run_dir / "evidence_store" / "findings.json"
     try:
@@ -192,7 +206,7 @@ class ScanMonitor(App[None]):
             ("Status   ", "dim"), (self._status, status_style), "\n",
             ("Targets  ", "dim"), targets, "\n",
             ("Mode     ", "dim"), f"{rec.get('scan_mode', '?')}"
-            f"{' (black-box)' if rec.get('black_box') else ''}  ",
+            f"{_engagement_label(rec)}  ",
             ("phases ", "dim"), " → ".join(rec.get("phases") or []), "\n",
             ("Runtime  ", "dim"), runtime,
         )

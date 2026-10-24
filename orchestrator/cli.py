@@ -106,20 +106,51 @@ def _render_focus_block(focus: str | None) -> str:
     )
 
 
-_BLACK_BOX_BLOCK = (
-    "\nBLACK-BOX WEB RUN:\n"
-    "- The authorized targets are live web assets (URL / domain / IP), so this "
-    "is a black-box web engagement, not a code review. There is no source tree "
-    "to read; work hands-on against the live targets within the scope above.\n"
-    "- Load the black-box web doctrine and skills, and drive the work with the "
-    "`agent-browser` CLI and direct HTTP (`curl` / `httpx`) via Bash, strictly "
-    "within the authorized scope.\n"
+# Shared mandate for any run that includes live web assets: drive the live work
+# with the browser/HTTP tooling and capture HTTP evidence for every web finding.
+_WEB_EVIDENCE_MANDATE = (
+    "- Load the black-box web doctrine and skills, and drive the live-target "
+    "work with the `agent-browser` CLI and direct HTTP (`curl` / `httpx`) via "
+    "Bash, strictly within the authorized scope.\n"
     "- Every HTTP interaction that backs a finding MUST be captured as HTTP "
     "evidence: store the raw request/response pair with the evidence_store tool "
     "`mcp__evidence_store__add_evidence` (type=\"http\") following the canonical "
     "request/response convention from the loaded doctrine/skills, then cite the "
     "returned ref in that finding's evidence (type \"http\").\n"
 )
+
+# Pure black-box: only live web assets in scope, no source tree.
+_BLACK_BOX_BLOCK = (
+    "\nBLACK-BOX WEB RUN:\n"
+    "- The authorized targets are live web assets (URL / domain / IP), so this "
+    "is a black-box web engagement, not a code review. There is no source tree "
+    "to read; work hands-on against the live targets within the scope above.\n"
+    f"{_WEB_EVIDENCE_MANDATE}"
+)
+
+# Gray-box: both source code and live web assets are in scope. The source tree
+# MUST still be reviewed — do not treat this as pure black-box.
+_GRAY_BOX_BLOCK = (
+    "\nGRAY-BOX RUN (source code + live web):\n"
+    "- The authorized scope mixes source-code targets AND live web assets "
+    "(URL / domain / IP), so this is a gray-box engagement: review the source "
+    "tree AND exercise the live targets within the scope above. Use what the "
+    "code reveals (routes, params, auth, sinks) to drive and confirm the live "
+    "testing — this is NOT a pure black-box run, so do not skip the source.\n"
+    f"{_WEB_EVIDENCE_MANDATE}"
+)
+
+
+def _render_web_block(has_web: bool, has_code: bool) -> str:
+    """Pick the web framing for the prompt from the classified target set.
+
+    * live web only -> pure black-box framing.
+    * live web + code -> gray-box framing (the source tree is still in scope).
+    * no live web -> no block (white-box code review).
+    """
+    if not has_web:
+        return ""
+    return _GRAY_BOX_BLOCK if has_code else _BLACK_BOX_BLOCK
 
 
 def _build_prompt(
@@ -128,7 +159,8 @@ def _build_prompt(
     depth: str,
     phases: Sequence[str],
     focus: str | None = None,
-    black_box: bool = False,
+    has_web: bool = False,
+    has_code: bool = False,
 ) -> str:
     """Compose the prompt: scope framing + phase directive + optional focus.
 
@@ -150,7 +182,7 @@ def _build_prompt(
         "- When finished, emit the final result strictly per the provided "
         "output schema; findings are taken from that structured output, not "
         "from prose.\n"
-        f"{_BLACK_BOX_BLOCK if black_box else ''}"
+        f"{_render_web_block(has_web, has_code)}"
         f"{_render_focus_block(focus)}"
     )
 
@@ -239,11 +271,16 @@ def _cmd_run(args: argparse.Namespace, observer: RunObserver | None = None) -> i
     # Keeps M0-M2 behaviour identical for code-only runs.
     target_types = [target.type for target in targets]
     phases = phases_for(mode, target_types)
-    black_box = is_black_box(target_types)
+    has_web = is_black_box(target_types)
+    has_code = any(t == "code" for t in target_types)
+    # "black_box" in the record means a pure live-web run (no source tree); a
+    # mixed source+web run is gray-box, not black-box.
+    black_box = has_web and not has_code
 
     scope_block = render_scope_block(targets)
     prompt = _build_prompt(
-        scope_block, mode.name, mode.depth, phases, config.focus, black_box=black_box
+        scope_block, mode.name, mode.depth, phases, config.focus,
+        has_web=has_web, has_code=has_code,
     )
 
     record: dict[str, Any] = {
