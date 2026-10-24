@@ -18,6 +18,7 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import IO
 
 from .config import Config
 
@@ -150,6 +151,8 @@ def run_agent(
     *,
     on_line: Callable[[str], None] | None = None,
     env: dict[str, str] | None = None,
+    stderr: IO[str] | None = None,
+    on_start: Callable[[subprocess.Popen[str]], None] | None = None,
 ) -> int:
     """Run ``agentiscode``, feeding ``prompt`` on stdin and streaming stdout.
 
@@ -157,18 +160,24 @@ def run_agent(
     arrives. Returns the process exit code. ``stderr`` is inherited so adapter
     diagnostics reach the operator. No secret is placed in ``cmd`` or
     ``prompt``; keys live in ``env`` (inherited from the caller).
+
+    ``stderr`` overrides where adapter diagnostics go (the interactive TUI sends
+    them to a file so they cannot corrupt the screen); ``on_start`` receives the
+    live process so a caller can terminate it.
     """
     process = subprocess.Popen(
         list(cmd),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=sys.stderr,
+        stderr=stderr if stderr is not None else sys.stderr,
         text=True,
         bufsize=1,
         env=env,
     )
     assert process.stdin is not None
     assert process.stdout is not None
+    if on_start is not None:
+        on_start(process)
 
     try:
         process.stdin.write(prompt)

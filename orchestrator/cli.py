@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from . import __version__
 from .config import load_config
@@ -45,6 +46,21 @@ EXIT_FATAL = 1
 EXIT_USAGE = 2
 
 _SCHEMA_PATH = schema_path()
+
+
+class RunObserver(Protocol):
+    """Receives a run's progress instead of stderr (used by the ``-i`` TUI).
+
+    Callbacks fire on the thread executing :func:`_cmd_run`.
+    """
+
+    def log(self, message: str) -> None: ...
+
+    def run_started(self, run_dir: Path, record: dict[str, Any]) -> None: ...
+
+    def progress(self, hint: str | None, aggregate: EventAggregate) -> None: ...
+
+    def agent_started(self, process: subprocess.Popen[str]) -> None: ...
 
 
 def _log(message: str) -> None:
@@ -161,9 +177,12 @@ def _add_run_parser(subparsers: argparse._SubParsersAction) -> None:
     run.add_argument("--task-id", default=None, help="telemetry task id (optional)")
     run.add_argument("--project-id", default=None, help="telemetry project id (optional)")
     run.add_argument("--run-id", default=None, help="telemetry run id (optional)")
+    run.add_argument("--interactive", "-i", action="store_true",
+                     help="watch the scan in a live terminal UI (read-only)")
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
+def _cmd_run(args: argparse.Namespace, observer: RunObserver | None = None) -> int:
+    log = observer.log if observer is not None else _log
     # 1. Resolve config (defaults < file < env < CLI flags).
     config = load_config(
         config_path=args.config,
@@ -181,20 +200,20 @@ def _cmd_run(args: argparse.Namespace) -> int:
     try:
         adapter = canonical_adapter(config.adapter)
     except UnknownAdapterError as exc:
-        _log(f"error: {exc}")
+        log(f"error: {exc}")
         return EXIT_USAGE
 
     # 3. Validate scope BEFORE launch; out-of-scope targets are refused.
     try:
         targets = build_scope(args.target)
     except ScopeError as exc:
-        _log(f"scope refused: {exc}")
+        log(f"scope refused: {exc}")
         return EXIT_USAGE
 
     try:
         mode = get_scan_mode(config.scan_mode)
     except ValueError as exc:
-        _log(f"error: {exc}")
+        log(f"error: {exc}")
         return EXIT_USAGE
 
     # 4. Prepare the run directory (Strix-compatible layout).
@@ -241,7 +260,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
         "llm_usage": {"cost": 0.0},
     }
     _write_run_record(run_dir, record)
-    _log(f"run {run_name}: adapter={adapter} mode={mode.name} targets={len(targets)}")
+    if observer is not None:
+        observer.run_started(run_dir, record)
+    log(f"run {run_name}: adapter={adapter} mode={mode.name} targets={len(targets)}")
 
     # 5. Build the agentiscode command.
     telemetry = Telemetry(
@@ -259,7 +280,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             allowed_tools=("mcp__evidence_store",),
         )
     except UnknownAdapterError as exc:
-        _log(f"error: {exc}")
+        log(f"error: {exc}")
         record["status"] = "failed"
         record["end_time"] = datetime.now(UTC).isoformat()
         _write_run_record(run_dir, record)
@@ -279,28 +300,46 @@ def _cmd_run(args: argparse.Namespace) -> int:
         aggregate.update(event)
         record["llm_usage"] = aggregate.to_dict()
         hint = describe_event(event, tool_names)
-        if hint:
-            _log(f"progress: {hint}")
+        if observer is not None:
+            observer.progress(hint, aggregate)
+        elif hint:
+            log(f"progress: {hint}")
         if budget and aggregate.cost > budget and not over_budget:
             over_budget = True
-            _log(f"warning: cost {aggregate.cost:.4f} exceeds budget {budget}")
+            log(f"warning: cost {aggregate.cost:.4f} exceeds budget {budget}")
         # Persist progress so a crash still leaves an up-to-date run.json.
         _write_run_record(run_dir, record)
 
+    # In interactive mode adapter stderr would corrupt the screen; keep it in
+    # the run directory instead.
+    stderr_file = (
+        (run_dir / "agent.stderr.log").open("w", encoding="utf-8")
+        if observer is not None
+        else None
+    )
     try:
-        returncode = run_agent(cmd, prompt, on_line=on_line)
+        returncode = run_agent(
+            cmd,
+            prompt,
+            on_line=on_line,
+            stderr=stderr_file,
+            on_start=observer.agent_started if observer is not None else None,
+        )
     except FileNotFoundError:
-        _log("fatal: agentiscode executable not found on PATH")
+        log("fatal: agentiscode executable not found on PATH")
         record["status"] = "failed"
         record["end_time"] = datetime.now(UTC).isoformat()
         _write_run_record(run_dir, record)
         return EXIT_FATAL
     except Exception as exc:  # noqa: BLE001 — surface any launch failure as fatal
-        _log(f"fatal: {exc}")
+        log(f"fatal: {exc}")
         record["status"] = "failed"
         record["end_time"] = datetime.now(UTC).isoformat()
         _write_run_record(run_dir, record)
         return EXIT_FATAL
+    finally:
+        if stderr_file is not None:
+            stderr_file.close()
 
     end_time = datetime.now(UTC)
     record["end_time"] = end_time.isoformat()
@@ -316,7 +355,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
         record["status"] = final.get("status", "completed")
         record["findings_count"] = len(final.get("findings") or [])
         record["artifacts"] = {name: str(path) for name, path in artifacts.items()}
-        _log(
+        log(
             f"done: status={record['status']} findings={record['findings_count']} "
             f"cost={aggregate.cost:.4f}"
         )
@@ -334,7 +373,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 schema_path=_SCHEMA_PATH,
             )
         except FinalOutputError as recover_exc:
-            _log(f"warning: partial recovery failed schema validation: {recover_exc}")
+            log(f"warning: partial recovery failed schema validation: {recover_exc}")
         if recovered is not None:
             artifacts = generate_reports(
                 run_dir, recovered, timestamp=end_time.isoformat()
@@ -343,19 +382,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
             record["interrupted"] = True
             record["findings_count"] = len(recovered.get("findings") or [])
             record["artifacts"] = {name: str(path) for name, path in artifacts.items()}
-            _log(
+            log(
                 f"interrupted: {exc} — recovered partial "
                 f"(findings={record['findings_count']}, cost={aggregate.cost:.4f})"
             )
         else:
-            _log(f"fatal: {exc} (no evidence to recover)")
+            log(f"fatal: {exc} (no evidence to recover)")
             record["status"] = "failed"
             exit_code = EXIT_FATAL
     finally:
         _write_run_record(run_dir, record)
 
     if returncode != 0 and exit_code == EXIT_OK:
-        _log(f"warning: agentiscode exited {returncode} but final.json was valid")
+        log(f"warning: agentiscode exited {returncode} but final.json was valid")
 
     return exit_code
 
@@ -380,6 +419,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_USAGE if exc.code not in (0, None) else EXIT_OK
 
     if args.command == "run":
+        if args.interactive:
+            from .tui import run_interactive
+
+            return run_interactive(args, _cmd_run)
         return _cmd_run(args)
 
     parser.print_help(sys.stderr)

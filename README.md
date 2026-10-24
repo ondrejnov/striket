@@ -165,6 +165,25 @@ by the finding:
 The evidence flows into `final.json` and the reports. Details are in
 [`mcp/evidence_store/README.md`](mcp/evidence_store/README.md#http-evidence-black-box-runs).
 
+### Interactive monitor
+
+Add `-i` / `--interactive` to watch the scan live in a terminal UI
+([Textual](https://textual.textualize.io/)):
+
+```bash
+striket run --target ./ --scan-mode quick -i
+```
+
+It shows the run (status, targets, phases, runtime), live elapsed time, cost
+against `--max-budget`, token usage, an activity log of agent tool calls,
+reasoning and errors, and the findings filed to the evidence store so far
+(sorted by severity; select a row for details). The run itself is identical to
+a non-interactive one, and the monitor is read-only. Pressing `q` while the
+scan is running asks for confirmation, then stops the agent like Ctrl+C would;
+the run is still finalized (partial recovery included) and a summary is printed
+after the UI closes. In this mode adapter stderr goes to
+`striket_runs/<run-name>/agent.stderr.log` instead of the terminal.
+
 ### Configuration
 
 Every tunable has a default in `orchestrator/config.py`. Resolution order:
@@ -234,6 +253,7 @@ orchestrator/
   scope.py        scope block for the prompt + in-scope-only validation
   events.py       streaming parser for agentiscode --json events
   report.py       final.json -> markdown + vulnerabilities.json + SARIF
+  tui.py          read-only live monitor for `striket run -i` (Textual)
 harness/
   CLAUDE.md       operational doctrine (white-box + black-box rules)
   agents/         root, recon, mapping, testing, fix role directives

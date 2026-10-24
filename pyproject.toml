@@ -14,6 +14,7 @@ keywords = ["security", "pentest", "sast", "sarif", "agentiscode", "authorized-t
 
 dependencies = [
   "jsonschema>=4.21",
+  "textual>=1.0",
 ]
 
 [project.optional-dependencies]
