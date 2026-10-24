@@ -118,7 +118,7 @@ striket run \
   --scan-mode quick      \   # quick | deep
   --max-budget 10        \   # USD ceiling tracked against streamed cost hints
   --focus "auth, IDOR"   \   # optional: what to prioritise (never widens scope)
-  --headless                 # headless run (JSON events); the only supported mode
+  --headless                 # optional: plain run without the terminal UI (implied without a TTY)
 ```
 
 This builds and runs `agentiscode`, reads its `--json` events as they stream,
@@ -167,21 +167,25 @@ The evidence flows into `final.json` and the reports. Details are in
 
 ### Interactive monitor
 
-Add `-i` / `--interactive` to watch the scan live in a terminal UI
-([Textual](https://textual.textualize.io/)):
+On a terminal, `striket run` shows the scan live in a terminal UI
+([Textual](https://textual.textualize.io/)) by default:
 
 ```bash
-striket run --target ./ --scan-mode quick -i
+striket run --target ./ --scan-mode quick
 ```
+
+Pass `--headless` for a plain run without the UI (log lines on stderr, e.g. for
+CI). It is also used automatically when stdin or stdout is not a TTY. `-i` /
+`--interactive` still works and forces the UI on; `--headless` wins if both are given.
 
 It shows the run (status, targets, phases, runtime), live elapsed time, cost
 against `--max-budget`, token usage, an activity log of agent tool calls,
 reasoning and errors, and the findings filed to the evidence store so far
 (sorted by severity; select a row for details). The run itself is identical to
-a non-interactive one, and the monitor is read-only. Pressing `q` while the
+a headless one, and the monitor is read-only. Pressing `q` while the
 scan is running asks for confirmation, then stops the agent like Ctrl+C would;
 the run is still finalized (partial recovery included) and a summary is printed
-after the UI closes. In this mode adapter stderr goes to
+after the UI closes. With the UI, adapter stderr goes to
 `striket_runs/<run-name>/agent.stderr.log` instead of the terminal.
 
 ### Configuration

@@ -171,14 +171,16 @@ def _add_run_parser(subparsers: argparse._SubParsersAction) -> None:
                      help="what the scan should prioritise, e.g. 'auth and session "
                           "handling' (stays within scope; default from config)")
     run.add_argument("--headless", action="store_true",
-                     help="headless run (no TTY, JSON events); the only supported mode")
+                     help="plain headless run without the terminal UI (log lines on stderr); "
+                          "implied when stdin/stdout is not a TTY")
     run.add_argument("--config", default=None, help="path to a striket config file")
     run.add_argument("--run-name", default=None, help="override the run directory name")
     run.add_argument("--task-id", default=None, help="telemetry task id (optional)")
     run.add_argument("--project-id", default=None, help="telemetry project id (optional)")
     run.add_argument("--run-id", default=None, help="telemetry run id (optional)")
     run.add_argument("--interactive", "-i", action="store_true",
-                     help="watch the scan in a live terminal UI (read-only)")
+                     help="live terminal UI (read-only); this is the default on a TTY, "
+                          "so the flag only forces it (overridden by --headless)")
 
 
 def _cmd_run(args: argparse.Namespace, observer: RunObserver | None = None) -> int:
@@ -410,6 +412,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _use_tui(args: argparse.Namespace) -> bool:
+    """The live terminal UI is the default; ``--headless`` or a non-TTY opts out."""
+    if args.headless:
+        return False
+    return args.interactive or (sys.stdin.isatty() and sys.stdout.isatty())
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     try:
@@ -419,7 +428,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return EXIT_USAGE if exc.code not in (0, None) else EXIT_OK
 
     if args.command == "run":
-        if args.interactive:
+        if _use_tui(args):
             from .tui import run_interactive
 
             return run_interactive(args, _cmd_run)

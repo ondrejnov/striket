@@ -110,9 +110,9 @@ def _usage(obj: dict[str, Any]) -> dict[str, Any]:
     return usage if isinstance(usage, dict) else {}
 
 
-def _truncate(value: str, max_len: int = 160) -> str:
+def _truncate(value: str, max_len: int | None = 160) -> str:
     value = (value or "").strip().replace("\n", " ")
-    if len(value) <= max_len:
+    if max_len is None or len(value) <= max_len:
         return value
     return value[: max_len - 1].rstrip() + "…"
 
@@ -216,12 +216,13 @@ def describe_event(
         # "completed" snapshots just mirror a "running" we already logged.
         return None
 
+    # Agent prose is the operator's main signal, so it is never shortened.
     if kind == "text":
-        text = _truncate(raw.get("text") or "")
+        text = _truncate(raw.get("text") or "", None)
         return text or None
 
     if kind == "reasoning":
-        text = _truncate(raw.get("text") or "")
+        text = _truncate(raw.get("text") or "", None)
         return f"thinking: {text}" if text else None
 
     if kind == "session":

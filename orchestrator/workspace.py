@@ -77,13 +77,14 @@ def _write_mcp_config(workspace: Path, run_dir: Path) -> None:
     """Register the evidence_store MCP server, scoped to this run's data dir."""
     if not _EVIDENCE_STORE.exists():
         return
-    evidence_data = run_dir / "evidence_store"
-    evidence_data.mkdir(parents=True, exist_ok=True)
+    # The server takes the run dir itself and keeps its state in
+    # ``<run_dir>/evidence_store/`` — where the TUI and partial recovery read it.
+    (run_dir / "evidence_store").mkdir(parents=True, exist_ok=True)
     config = {
         "mcpServers": {
             "evidence_store": {
                 "command": "python3",
-                "args": [str(_EVIDENCE_STORE), "--run-dir", str(evidence_data)],
+                "args": [str(_EVIDENCE_STORE), "--run-dir", str(run_dir)],
             }
         }
     }
