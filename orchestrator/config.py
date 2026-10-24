@@ -27,6 +27,12 @@ DEFAULT_EFFORT: str | None = "xhigh"
 DEFAULT_SCAN_MODE = "quick"
 DEFAULT_MAX_BUDGET = 10.0
 
+# Wall-clock cap (seconds) for the agent run. ``None`` defers to the scan
+# mode's own ``timeout_s`` (which itself defaults to ``0`` = no limit, so a run
+# is unbounded by default). Set a positive value here, via ``STRIKET_TIMEOUT``,
+# or with ``--timeout`` to impose one; ``0`` explicitly means no limit.
+DEFAULT_TIMEOUT: int | None = None
+
 # Optional operator guidance on what the scan should prioritise (e.g. "auth and
 # session handling"). It narrows attention *within* the validated scope and
 # never widens it; ``None`` means no extra guidance in the prompt.
@@ -68,6 +74,7 @@ class Config:
     effort: str | None = DEFAULT_EFFORT
     scan_mode: str = DEFAULT_SCAN_MODE
     max_budget: float = DEFAULT_MAX_BUDGET
+    timeout: int | None = DEFAULT_TIMEOUT
     focus: str | None = DEFAULT_FOCUS
     permission_mode: str = DEFAULT_PERMISSION_MODE
     disallowed_tools: tuple[str, ...] = DEFAULT_DISALLOWED_TOOLS
@@ -86,6 +93,7 @@ class Config:
             "effort": self.effort,
             "scan_mode": self.scan_mode,
             "max_budget": self.max_budget,
+            "timeout": self.timeout,
             "focus": self.focus,
             "permission_mode": self.permission_mode,
             "disallowed_tools": list(self.disallowed_tools),
@@ -132,6 +140,7 @@ _FIELD_PARSERS: dict[str, Any] = {
     "effort": str,
     "scan_mode": str,
     "max_budget": float,
+    "timeout": int,
     "focus": str,
     "permission_mode": str,
 }
@@ -197,6 +206,7 @@ __all__ = [
     "DEFAULT_MODEL",
     "DEFAULT_PERMISSION_MODE",
     "DEFAULT_SCAN_MODE",
+    "DEFAULT_TIMEOUT",
     "Config",
     "load_config",
 ]

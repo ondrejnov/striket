@@ -2,6 +2,9 @@
 
 A scan mode maps to a wall-clock ``timeout_s``, an analysis ``depth`` hint fed
 into the prompt, and the ordered list of phases the agent is allowed to run.
+Both modes default to ``timeout_s=0`` (no wall-clock limit): a security audit
+runs to completion rather than being hard-killed mid-step. A cap can still be
+imposed per run with ``--timeout`` / ``STRIKET_TIMEOUT`` / the config file.
 
 Each mode carries two phase plans selected by the dominant target type:
 
@@ -43,7 +46,7 @@ class ScanMode:
 
 QUICK = ScanMode(
     name="quick",
-    timeout_s=900,
+    timeout_s=0,  # no wall-clock limit; override per run with --timeout
     depth="shallow",
     phases=("recon", "testing"),
     # Black-box needs a mapping/crawl phase to discover routes/params/auth even
@@ -53,7 +56,7 @@ QUICK = ScanMode(
 
 DEEP = ScanMode(
     name="deep",
-    timeout_s=10800,
+    timeout_s=0,  # no wall-clock limit; override per run with --timeout
     depth="deep",
     phases=("recon", "mapping", "testing"),
     web_phases=("recon", "mapping", "testing"),

@@ -199,6 +199,9 @@ def _add_run_parser(subparsers: argparse._SubParsersAction) -> None:
                      help="quick | deep (default from config)")
     run.add_argument("--max-budget", type=float, default=None, metavar="USD",
                      help="budget ceiling tracked against streamed cost hints")
+    run.add_argument("--timeout", type=int, default=None, metavar="SECONDS",
+                     help="wall-clock limit in seconds; 0 = no limit "
+                          "(default: no limit)")
     run.add_argument("--focus", "-f", default=None, metavar="TEXT",
                      help="what the scan should prioritise, e.g. 'auth and session "
                           "handling' (stays within scope; default from config)")
@@ -226,6 +229,7 @@ def _cmd_run(args: argparse.Namespace, observer: RunObserver | None = None) -> i
             "effort": args.effort,
             "scan_mode": args.scan_mode,
             "max_budget": args.max_budget,
+            "timeout": args.timeout,
             "focus": args.focus,
         },
     )
@@ -313,7 +317,9 @@ def _cmd_run(args: argparse.Namespace, observer: RunObserver | None = None) -> i
             sandbox_workdir=sandbox_workdir,
             run_dir=run_dir,
             schema_path=_SCHEMA_PATH,
-            timeout_s=mode.timeout_s,
+            # ``--timeout`` (config.timeout) wins when set; otherwise the scan
+            # mode's own cap applies (0 = no wall-clock limit).
+            timeout_s=config.timeout if config.timeout is not None else mode.timeout_s,
             telemetry=telemetry,
             add_dirs=add_dirs,
             allowed_tools=("mcp__evidence_store",),
