@@ -1,0 +1,25 @@
+# Run artifacts (Strix-compatible layout)
+/striket_runs/
+
+# Config that may name a model/adapter per machine — never commit secrets
+striket.toml
+.striket.toml
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Editors / OS
+.DS_Store
+*.swp

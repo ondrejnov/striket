@@ -1,0 +1,29 @@
+{
+  "status": "completed",
+  "scope": {
+    "targets": ["tests/fixtures/vulnerable-sample"],
+    "notes": "White-box review of the local fixture only."
+  },
+  "coverage": [
+    {"area": "injection", "state": "tested"},
+    {"area": "secrets", "state": "tested"},
+    {"area": "authentication", "state": "skipped", "reason": "Sample has no auth logic."}
+  ],
+  "findings": [
+    {
+      "id": "F-001",
+      "title": "SQL injection in /user lookup",
+      "severity": "high",
+      "cwe": "CWE-89",
+      "location": "tests/fixtures/vulnerable-sample/app.py:17",
+      "summary": "The `name` query parameter is concatenated directly into a SQL statement, so request input can change the structure of the query.",
+      "evidence": [{"type": "code", "ref": "evidence/F-001-app.py.txt"}],
+      "reproduction": "Review app.py:17; trace request.args['name'] into conn.execute without parameter binding.",
+      "remediation": "Use a parameterized query (placeholder with bound argument) instead of string concatenation."
+    }
+  ],
+  "stats": {
+    "duration_s": 12.5,
+    "phases_completed": ["recon", "static-analysis", "reporting"]
+  }
+}

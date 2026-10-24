@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://striket.dev/schemas/final_output.schema.json",
+  "title": "Striket agent final output",
+  "description": "Structured result an authorized-security-testing agent fills in at the end of a run. The orchestrator validates against this schema before rendering reports; findings are taken from here, never from free text. No payloads or exploits are prescribed by this schema — concrete actions are the runtime agent's job on an approved, in-scope target.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "scope", "coverage", "findings", "stats"],
+  "properties": {
+    "status": {
+      "description": "Overall outcome of the run.",
+      "type": "string",
+      "enum": ["completed", "partial", "failed"]
+    },
+    "scope": {
+      "description": "The authorized scope the agent actually worked within.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["targets"],
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "coverage": {
+      "description": "Per-area account of what was and was not tested, so gaps are explicit rather than implied.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["area", "state"],
+        "properties": {
+          "area": { "type": "string", "minLength": 1 },
+          "state": {
+            "type": "string",
+            "enum": ["tested", "partial", "skipped"]
+          },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "findings": {
+      "description": "Confirmed or suspected vulnerabilities. Empty array means no findings.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "severity", "location", "summary"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable identifier for the finding within this run."
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "severity": {
+            "type": "string",
+            "enum": ["info", "low", "medium", "high", "critical"]
+          },
+          "cwe": {
+            "description": "CWE identifier (e.g. CWE-89) or null when not applicable.",
+            "type": ["string", "null"]
+          },
+          "location": {
+            "description": "Where the weakness lives: file:line, URL, or endpoint.",
+            "type": "string",
+            "minLength": 1
+          },
+          "summary": {
+            "description": "What is vulnerable and why.",
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["type", "ref"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": ["http", "code", "log", "screenshot"]
+                },
+                "ref": {
+                  "description": "Reference into the evidence store.",
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "reproduction": {
+            "description": "Steps to verify the finding, strictly in-scope.",
+            "type": "string"
+          },
+          "remediation": {
+            "description": "Recommended fix.",
+            "type": "string"
+          }
+        }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phases_completed"],
+      "properties": {
+        "duration_s": {
+          "type": "number",
+          "minimum": 0
+        },
+        "phases_completed": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

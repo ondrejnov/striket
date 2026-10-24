@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "striket"
+version = "0.1.0"
+description = "Thin, adapter-agnostic orchestrator over agentiscode for authorized security testing — Strix know-how without the Strix agent engine."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Striket contributors" }]
+keywords = ["security", "pentest", "sast", "sarif", "agentiscode", "authorized-testing"]
+
+dependencies = [
+  "jsonschema>=4.21",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.5",
+  "mypy>=1.10",
+]
+
+[project.scripts]
+striket = "orchestrator.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["orchestrator"]
+artifacts = ["schemas/*.json"]
+
+[tool.hatch.build.targets.sdist]
+include = ["orchestrator", "schemas", "README.md"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
