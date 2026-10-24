@@ -21,9 +21,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .resources import schema_path as _schema_path
+
 # --- Schema validation ------------------------------------------------------
 
-_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "final_output.schema.json"
+_SCHEMA_PATH = _schema_path()
 
 
 class FinalOutputError(ValueError):

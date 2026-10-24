@@ -202,6 +202,10 @@ def describe_event(
         name = name or "tool"
         if status == "running":
             title = raw.get("title")
+            tool_input = raw.get("input")
+            if (not title or title == name) and isinstance(tool_input, dict):
+                # Older agentiscode builds don't derive a title for Skill calls.
+                title = tool_input.get("skill") or title
             label = f"{name}({title})" if title and title != name else name
             return f"tool {label}"
         if status == "error":

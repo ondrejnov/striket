@@ -18,9 +18,10 @@ import json
 import shutil
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-_HARNESS_DIR = _REPO_ROOT / "harness"
-_EVIDENCE_STORE = _REPO_ROOT / "mcp" / "evidence_store"
+from .resources import evidence_store_dir, harness_dir
+
+_HARNESS_DIR = harness_dir()
+_EVIDENCE_STORE = evidence_store_dir()
 
 
 def _copy_skills(src_skills: Path, dst_skills: Path) -> int:

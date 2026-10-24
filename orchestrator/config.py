@@ -22,8 +22,8 @@ from typing import Any
 # --- Defaults (single source of truth; nothing hardcoded at call sites) -----
 
 DEFAULT_ADAPTER = "claude"
-DEFAULT_MODEL: str | None = None
-DEFAULT_EFFORT: str | None = None
+DEFAULT_MODEL: str | None = "opus"
+DEFAULT_EFFORT: str | None = "xhigh"
 DEFAULT_SCAN_MODE = "quick"
 DEFAULT_MAX_BUDGET = 10.0
 

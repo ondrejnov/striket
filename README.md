@@ -73,8 +73,22 @@ adapters but are verified later (M4).
 
 ## Install
 
+Global install with [pipx](https://pipx.pypa.io/) (recommended; `striket` is
+available from any directory):
+
 ```bash
-pip install -e .            # provides the `striket` console script
+pipx install .              # from the repo root; installs into ~/.local/bin
+pipx reinstall striket      # pick up local code changes after editing
+pipx uninstall striket      # remove
+```
+
+Use `pipx install --editable .` instead if changes in the repo should take
+effect without reinstalling.
+
+For development inside a virtualenv:
+
+```bash
+pip install -e ".[dev]"     # provides the `striket` console script + dev tools
 ```
 
 Requires Python 3.12+ and the [`agentiscode`](https://github.com/ondrejnov/agentiscode-cli) CLI on `PATH`. LLM/telemetry keys

@@ -28,10 +28,19 @@ striket = "orchestrator.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["orchestrator"]
-artifacts = ["schemas/*.json"]
+
+# These trees are loaded at runtime but are not Python packages, so a plain
+# install would drop them. Force-include them inside the installed package as
+# orchestrator/_bundle/... ; orchestrator.resources resolves them from there
+# when the repo-root copy is absent (see that module). mcp/ is deliberately
+# nested under _bundle so it never shadows the third-party ``mcp`` SDK.
+[tool.hatch.build.targets.wheel.force-include]
+"schemas" = "orchestrator/_bundle/schemas"
+"harness" = "orchestrator/_bundle/harness"
+"mcp" = "orchestrator/_bundle/mcp"
 
 [tool.hatch.build.targets.sdist]
-include = ["orchestrator", "schemas", "README.md"]
+include = ["orchestrator", "schemas", "harness", "mcp", "README.md"]
 
 [tool.ruff]
 target-version = "py312"

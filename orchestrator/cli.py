@@ -29,6 +29,7 @@ from .config import load_config
 from .events import EventAggregate, describe_event, parse_line
 from .harness import Telemetry, UnknownAdapterError, build_command, canonical_adapter, run_agent
 from .report import FinalOutputError, generate_reports, read_final_output
+from .resources import runs_dir, schema_path
 from .scan_modes import get_scan_mode
 from .scope import ScopeError, Target, build_scope, render_scope_block
 from .workspace import stage_workspace
@@ -37,8 +38,7 @@ EXIT_OK = 0
 EXIT_FATAL = 1
 EXIT_USAGE = 2
 
-_SCHEMA_PATH = Path(__file__).resolve().parent.parent / "schemas" / "final_output.schema.json"
-_RUNS_DIR = Path(__file__).resolve().parent.parent / "striket_runs"
+_SCHEMA_PATH = schema_path()
 
 
 def _log(message: str) -> None:
@@ -174,7 +174,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
     # 4. Prepare the run directory (Strix-compatible layout).
     run_name = args.run_name or _run_name()
-    run_dir = _RUNS_DIR / run_name
+    run_dir = runs_dir() / run_name
     start_time = datetime.now(UTC)
 
     # Stage the harness (doctrine, agents, skills, evidence_store MCP) into a
