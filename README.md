@@ -2,7 +2,7 @@
 
 Striket is a **port of [Strix](https://github.com/usestrix/strix)** — the
 open-source AI security-testing agent — to the
-[`agentiscode`](https://github.com/ondrejnov/agentiscode-cli) CLI runtime. It carries over Strix's *know-how*
+[`agentiscode`](https://github.com/ondrejnov/agentiscode-cli) CLI runtime (claude code wrapper). It carries over Strix's *know-how*
 (operational doctrine, skill library, output/report formats, sandbox) and
 deliberately **drops Strix's own agent engine**. The orchestrator is a thin
 wrapper: it validates scope, builds and runs `agentiscode`, streams its events,
